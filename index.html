@@ -74,6 +74,9 @@ header{padding-top:max(12px,env(safe-area-inset-top))}
 .tk .st{font-size:13px;border-radius:8px;padding:7px 9px;margin-top:8px;background:#f3f4f6}
 .tk .st.g{background:#dcfce7;color:#166534}.tk .st.y{background:#fef9c3;color:#854d0e}.tk .st.r{background:#fee2e2;color:#991b1b}
 .btn.blue{background:#2563eb}
+.qty{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;flex-wrap:wrap}
+.qty button{width:42px;height:38px;border-radius:10px;border:2px solid #e5e7eb;background:#fff;font-size:20px;font-weight:700}
+.qty b{min-width:26px;text-align:center;font-size:19px;color:#ee4d2d}
 .fab{left:12px;transform:none;width:calc(62% - 18px);padding:18px 0}
 .fab2{position:fixed;right:12px;bottom:22px;z-index:6;width:calc(38% - 18px);padding:18px 0;border-radius:34px;border:2px solid #ee4d2d;background:#fff;color:#ee4d2d;font-size:17px;font-weight:700;box-shadow:0 6px 18px #0002}
 .kin{width:100%;padding:16px;font-size:24px;letter-spacing:1px;border:2px solid #ee4d2d;border-radius:12px;text-align:center}
@@ -181,23 +184,25 @@ function closeSheet(){$('snext').style.display='';$('sheet').classList.remove('o
 $('mask').onclick=closeSheet;$('sclose').onclick=closeSheet;$('snext').onclick=function(){closeSheet();openCam()};
 
 function actions(it,n){var a=$('a'+n);
+ if(!$('qw'+n)){a.insertAdjacentHTML('beforebegin','<div class="qty" id="qw'+n+'">Số áo trong món này: <button data-d="-1">−</button><b id="q'+n+'">1</b><button data-d="1">+</button><span class="small" style="color:#888;width:100%">Lô nhiều áo: giá và cân chia đều cho từng áo trong File Sapo</span></div>');
+  Array.prototype.forEach.call($('qw'+n).querySelectorAll('button'),function(b){b.onclick=function(){var q=$('q'+n);q.textContent=Math.max(1,Math.min(30,(+q.textContent)+(+b.dataset.d)))}})}
  if(it.c==='US'){a.innerHTML='<button class="btn green">✅ Đúng món này — NHẬN</button>';a.firstChild.onclick=function(){receive(it,n,'')};return}
  a.innerHTML='<div style="margin-top:8px;font-weight:600">Chọn cân (kg):</div><div class="kgs">'+KGS.map(function(k){return'<button>'+k+'</button>'}).join('')+'<button data-o="1">Khác</button></div><div id="t'+n+'"></div>';
  Array.prototype.forEach.call(a.querySelectorAll('.kgs button'),function(b){b.onclick=function(){
   var k=b.textContent;if(b.dataset.o){k=prompt('Cân nặng (kg), vd 1,2');if(!k)return;k=k.replace('.',',')}
   Array.prototype.forEach.call(a.querySelectorAll('.kgs button'),function(x){x.classList.remove('on')});b.classList.add('on');
-  var jp=it.c==='JP',base=jp?it.p-(it.sh||0):it.p,fee=kgNum(k)*(jp?170000:D.rate);$('t'+n).innerHTML='<div class="total">Giá '+vnd(base)+(jp?' (đã bỏ ship NCC)':'')+' + cân '+k+'kg ('+vnd(fee)+')<br>TỔNG: <b>'+vnd(base+fee)+'</b></div>';
+  var sl=+(($('q'+n)||{}).textContent)||1,jp=it.c==='JP',base=jp?it.p-(it.sh||0):it.p,fee=kgNum(k)*(jp?170000:D.rate);$('t'+n).innerHTML='<div class="total">Giá '+vnd(base)+(jp?' (đã bỏ ship NCC)':'')+' + cân '+k+'kg ('+vnd(fee)+')<br>TỔNG: <b>'+vnd(base+fee)+'</b>'+(sl>1?'<br>÷ '+sl+' áo = <b>'+vnd((base+fee)/sl)+'</b> / áo':'')+'</div>';
   receive(it,n,k)}})}
 
 /* ---- ghi nhận: chạy nền, không bắt chờ ---- */
-function receive(it,n,kg){var b=$('b'+n);if(b.dataset.busy)return;b.dataset.busy=1;
+function receive(it,n,kg){var b=$('b'+n);if(b.dataset.busy)return;var sl=+(($('q'+n)||{}).textContent)||1;b.dataset.busy=1;
  hidden[key(it)]=Date.now();ls('hidden',hidden);b.classList.add('done');render();
  var a=$('a'+n);if(it.c==='US')a.innerHTML='<div class="total" style="background:#dcfce7">⏳ Đang ghi vào file…</div>';
  google.script.run.withSuccessHandler(function(r){b.dataset.busy='';
    if(it.c==='US')a.innerHTML='<div class="total" style="background:#dcfce7">✅ Đã nhận '+r.date+' · dòng '+r.row+'</div>';
    else a.insertAdjacentHTML('beforeend','<div class="total" style="background:#dcfce7">✅ Đã ghi '+kg+'kg + ngày '+r.date+' · dòng '+r.row+'</div>');
    a.querySelectorAll('.kgs button').forEach(function(x){x.disabled=true});
-   recvAdd(it,r,kg);qAdd(it,r.row,kg);if(r.warn)toast('⚠ Đã ghi ngày nhận nhưng chưa vào File Sapo: '+r.warn,'err');else toast('✅ Đã nhận '+it.tr,'ok','Hoàn tác',function(){undo(it,r.row,kg)})})
+   recvAdd(it,r,kg,sl);qAdd(it,r.row,kg,sl);if(r.warn)toast('⚠ Đã ghi ngày nhận nhưng chưa vào File Sapo: '+r.warn,'err');else toast('✅ Đã nhận '+it.tr,'ok','Hoàn tác',function(){undo(it,r.row,kg)})})
  .withFailureHandler(function(e){b.dataset.busy='';delete hidden[key(it)];ls('hidden',hidden);b.classList.remove('done');render();beep(false);toast(e.message,'err');actions(it,n)})
  .apiReceive(it,kg)}
 function undo(it,row,kg){google.script.run.withSuccessHandler(function(){delete hidden[key(it)];ls('hidden',hidden);recvDel(it);render();toast('Đã hoàn tác','')})
@@ -268,7 +273,7 @@ $('photo').onchange=function(e){var f=e.target.files[0];if(!f)return;e.target.va
 /* ---- danh sách đã nhận hôm nay + chốt + up Sapo ---- */
 function day0(){var d=new Date();d.setHours(0,0,0,0);return d.getTime()}
 function recvAll(){var a=ls('recv')||[],t=day0();a=a.filter(function(x){return x.at>=t});ls('recv',a);return a}
-function recvAdd(it,r,kg){var a=recvAll().filter(function(x){return x.k!==key(it)});a.push({k:key(it),c:it.c,tr:it.tr,p:it.p,kg:kg||'',t:it.t,row:r.row,at:Date.now(),it:it});ls('recv',a);recvBar()}
+function recvAdd(it,r,kg,sl){var a=recvAll().filter(function(x){return x.k!==key(it)});a.push({k:key(it),c:it.c,tr:it.tr,p:it.p,kg:kg||'',sl:sl||1,t:it.t,row:r.row,at:Date.now(),it:it});ls('recv',a);recvBar()}
 function recvDel(it){ls('recv',recvAll().filter(function(x){return x.k!==key(it)}));recvBar()}
 function recvBar(){var a=recvAll();$('rbar').style.display=a.length?'flex':'none';
  var n={KR:0,JP:0,US:0};a.forEach(function(x){n[x.c]++});
@@ -276,7 +281,7 @@ function recvBar(){var a=recvAll();$('rbar').style.display=a.length?'flex':'none
 function showSheet(h,noNext){$('sheet').innerHTML=h;$('mask').style.display='block';$('sbar').style.display='flex';$('snext').style.display=noNext?'none':'';setTimeout(function(){$('sheet').classList.add('open')},10)}
 $('rview').onclick=function(){var a=recvAll().slice().reverse();
  var h='<div class="sh-h"><span>Đã nhận hôm nay</span><span>'+a.length+' món</span></div>'+a.map(function(x){
-  return'<div class="rl"><span><span class="flag">'+FL[x.c]+'</span><b>'+esc(x.tr)+'</b><br><span class="small" style="color:#888">tab '+esc(x.t)+' · dòng '+x.row+(x.kg?' · '+esc(x.kg)+'kg':'')+' · '+new Date(x.at).toTimeString().slice(0,5)+'</span></span><span class="price">'+vnd(x.p)+'</span></div>'}).join('')+
+  return'<div class="rl"><span><span class="flag">'+FL[x.c]+'</span><b>'+esc(x.tr)+'</b><br><span class="small" style="color:#888">tab '+esc(x.t)+' · dòng '+x.row+(x.kg?' · '+esc(x.kg)+'kg':'')+(x.sl>1?' · <b>'+x.sl+' áo</b>':'')+' · '+new Date(x.at).toTimeString().slice(0,5)+'</span></span><span class="price">'+vnd(x.p)+'</span></div>'}).join('')+
   '<button class="btn green" id="rfin2">📦 Đã nhận toàn bộ hàng</button>';
  showSheet(h,true);$('rfin2').onclick=finish};
 $('rfin').onclick=finish;
@@ -288,12 +293,12 @@ function finish(){if(Q.length){showSheet('<div class="empty">⏳ Đang đưa '+Q
  google.script.run.withSuccessHandler(function(res){renderSum(res,a)}).withFailureHandler(function(e){showSheet('<div class="empty" style="color:#dc2626">'+esc(e.message)+'</div>',true)}).apiChot(cs)}
 function renderSum(res,a){var cs=Object.keys(res),tongM=0,tongT=0;
  var h='<div class="sh-h"><span>Tổng kết nhận hàng</span><span>'+new Date().toLocaleDateString('vi-VN')+'</span></div>';
- cs.forEach(function(c){var r=res[c]||{},nApp=a.filter(function(x){return x.c===c}).length;
+ cs.forEach(function(c){var r=res[c]||{},nApp=a.filter(function(x){return x.c===c}).reduce(function(s,x){return s+(x.sl||1)},0);
   h+='<div class="tk"><h3>'+FL[c]+' '+NM[c]+(r.ten?' · '+esc(r.ten):'')+'</h3>';
   if(r.loiHT){h+='<div class="st r">'+esc(r.loiHT)+'</div></div>';return}
   if(!r.co){h+='<div class="st y">Chưa có File Sapo'+(r.choKien?' — '+r.choKien+' món chờ NCC ghi "CÂN HÀNG VỀ"':'')+'</div></div>';return}
   tongM+=r.soMon;tongT+=r.tong;
-  h+='<div class="ln"><span>Nhận hôm nay (app)</span><b>'+nApp+' món</b></div><div class="ln"><span>Trong File Sapo</span><b>'+r.soMon+' món</b></div>'+
+  h+='<div class="ln"><span>Nhận hôm nay (số áo)</span><b>'+nApp+' món</b></div><div class="ln"><span>Trong File Sapo</span><b>'+r.soMon+' món</b></div>'+
    (r.tienCan?'<div class="ln"><span>Tiền cân (đã chia vào giá)</span><b>'+vnd(r.tienCan)+'</b></div>':'')+
    '<div class="ln"><span>Tổng giá vốn</span><b class="price">'+vnd(r.tong)+'</b></div>'+
    (r.choKien?'<div class="st y">'+r.choKien+' món Mỹ chưa có kiện (chờ NCC ghi "CÂN HÀNG VỀ")</div>':'')+
@@ -316,14 +321,14 @@ function upSapo(b,c,k,force){b.disabled=true;b.textContent='⏳ Đang gửi…';
 recvBar();
 /* ---- hàng đợi: gom món vừa quét, gửi file NCC 1 lần (File Sapo vẽ lại 1 lần) -> quét không phải chờ ---- */
 var Q=ls('hookQ')||[],qT=null,qBusy=false;
-function qAdd(it,row,kg){Q.push({c:it.c,tab:it.t,row:row,kg:kg||''});ls('hookQ',Q);qKick(2500)}
+function qAdd(it,row,kg,sl){Q.push({c:it.c,tab:it.t,row:row,kg:kg||'',sl:sl||1});ls('hookQ',Q);qKick(2500)}
 function qKick(ms){clearTimeout(qT);qT=setTimeout(function(){qRun()},ms)}
 function qRun(cb){if(qBusy){setTimeout(function(){qRun(cb)},800);return}
  if(!Q.length){if(cb)cb();return}
  var c=Q[0].c,ds=Q.filter(function(x){return x.c===c});qBusy=true;
  google.script.run.withSuccessHandler(function(){Q=Q.filter(function(x){return ds.indexOf(x)<0});ls('hookQ',Q);qBusy=false;if(Q.length)qRun(cb);else if(cb)cb()})
   .withFailureHandler(function(e){qBusy=false;toast('⚠ Chưa vào File Sapo ('+NM[c]+'): '+e.message+' — tự thử lại','err');qKick(15000);if(cb)cb(e)})
-  .apiNhanLo(c,ds.map(function(x){return{tab:x.tab,row:x.row,kg:x.kg||''}}))}
+  .apiNhanLo(c,ds.map(function(x){return{tab:x.tab,row:x.row,kg:x.kg||'',sl:x.sl||1}}))}
 window.addEventListener('pagehide',function(){if(Q.length&&!qBusy)qRun()});
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&Q.length)qKick(300)});
 if(Q.length&&CFG)qKick(1500);
