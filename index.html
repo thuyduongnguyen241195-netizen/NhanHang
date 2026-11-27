@@ -64,7 +64,7 @@ header{padding-top:max(12px,env(safe-area-inset-top))}
 .lnk{color:#2563eb;font-size:13px;text-decoration:none}
 </style></head><body>
 <header>
- <div class="top"><div><h1>📦 Nhận hàng</h1><small id="upd">Đang tải…</small></div><button class="ref" id="ref">⟳</button></div>
+ <div class="top"><div><h1>📦 Nhận hàng</h1><small id="upd">Đang tải…</small></div><div><button class="ref" id="share" title="Kết nối máy nhân viên" style="margin-right:6px">📲</button><button class="ref" id="ref">⟳</button></div></div>
  <div class="chips" id="chips"></div>
  <div id="doi"></div>
  <div class="sbox"><input id="q" inputmode="numeric" placeholder="🔍 Gõ số cuối tracking…"></div>
@@ -84,9 +84,12 @@ header{padding-top:max(12px,env(safe-area-inset-top))}
 <script>
 /* ---- kết nối Apps Script: link cài có dạng ...#c=MÃ ---- */
 var CFG=null;
+// Giữ mã kết nối NGAY TRÊN đường link (#c=...), để "Thêm vào MH chính" lưu luôn mã
+// (biểu tượng ngoài màn hình chính có bộ nhớ riêng, không dùng chung với Safari)
 (function(){var m=location.hash.match(/c=([A-Za-z0-9_\-=]+)/);
- if(m){try{var t=atob(m[1].replace(/-/g,'+').replace(/_/g,'/')).split('|');localStorage.setItem('cfg',JSON.stringify({api:t[0],k:t[1]}))}catch(e){}history.replaceState(null,'',location.pathname)}
- try{CFG=JSON.parse(localStorage.getItem('cfg'))}catch(e){}})();
+ if(m){try{var t=atob(m[1].replace(/-/g,'+').replace(/_/g,'/')).split('|');if(t[0]&&t[1]){CFG={api:t[0],k:t[1]};localStorage.setItem('cfg',JSON.stringify(CFG))}}catch(e){}}
+ if(!CFG){try{CFG=JSON.parse(localStorage.getItem('cfg'))}catch(e){}}
+ if(CFG&&!m){try{var c=btoa(CFG.api+'|'+CFG.k).replace(/\+/g,'-').replace(/\//g,'_');history.replaceState(null,'',location.pathname+'#c='+c)}catch(e){}}})();
 function call(fn,args){if(!CFG)return Promise.reject(new Error('Chưa kết nối — mở link cài đặt một lần'));
  return fetch(CFG.api,{method:'POST',body:JSON.stringify({fn:fn,args:args,k:CFG.k})})
   .then(function(r){return r.json()}).then(function(j){if(j.error)throw new Error(j.error);return j.result})}
@@ -125,7 +128,7 @@ function renderDoi(){var ck=D.checks||{},rows='',warn=0;
  $('doi').innerHTML=rows?'<details class="doi"'+(warn?' open':'')+'><summary>'+(warn?'⚠ Hàng chưa về LỆCH với Sổ ('+warn+' nước)':'✓ Hàng chưa về khớp với Sổ')+' ▾</summary>'+rows+'</details>':''}
 function pending(){return D.items.filter(function(i){return!hidden[key(i)]})}
 function load(){var c=localStorage.getItem('kho');if(c)try{setData(c)}catch(e){}
- google.script.run.withSuccessHandler(setData).withFailureHandler(function(e){toast(e.message,'err')}).apiIndex()}
+ google.script.run.withSuccessHandler(setData).withFailureHandler(function(e){if(!D.items.length)showConnect('Không kết nối được: '+e.message+' — dán lại link mới');else toast(e.message,'err')}).apiIndex()}
 $('ref').onclick=function(){$('upd').textContent='Đang làm mới…';
  google.script.run.withSuccessHandler(function(j){setData(j);toast('Đã làm mới','ok')}).withFailureHandler(function(e){toast(e.message,'err')}).apiRefresh()};
 
@@ -157,7 +160,7 @@ function openSheet(m,code){cur=m;var h='<div class="sh-h"><span>'+esc(code)+'</s
  m.forEach(function(it,n){actions(it,n)});
  if($('rtry'))$('rtry').onclick=function(){this.textContent='Đang làm mới…';google.script.run.withSuccessHandler(function(j){setData(j);lookup(code)}).apiRefresh()};
  $('mask').style.display='block';$('sbar').style.display='flex';setTimeout(function(){$('sheet').classList.add('open')},10)}
-function closeSheet(){$('sheet').classList.remove('open');$('mask').style.display='none';$('sbar').style.display='none'}
+function closeSheet(){$('snext').style.display='';$('sheet').classList.remove('open');$('mask').style.display='none';$('sbar').style.display='none'}
 $('mask').onclick=closeSheet;$('sclose').onclick=closeSheet;$('snext').onclick=function(){closeSheet();openCam()};
 
 function actions(it,n){var a=$('a'+n);
@@ -189,7 +192,8 @@ function matchOf(code){var q=dig(code);if(q.length<4)return[];
 // Tem có nhiều mã (mã bưu cục, QR...). Chỉ dừng khi đọc trúng mã có trong danh sách;
 // mã ngắn/không khớp thì bỏ qua và quét tiếp.
 function stopLoop(){loopOn=false;$('cam').style.display='none'}
-function onScan(t){var now=Date.now();if(t===lastCode&&now-lastT<2500)return;lastCode=t;lastT=now;
+function onScan(t){if(!CFG||/[#&]c=/.test(t)){var c=parseCfg(t);if(c){stopLoop();saveCfg(c);beep(true);toast('✅ Đã kết nối máy này','ok');$('list').innerHTML='<div class="empty">⏳ Đang tải…</div>';load();return}if(!CFG)return}
+ var now=Date.now();if(t===lastCode&&now-lastT<2500)return;lastCode=t;lastT=now;
  var q=dig(t),m=matchOf(t),camVis=$('cam').style.display!=='none';
  if(!m.length&&q.length<10&&camVis){$('camhint').querySelector('.skip').textContent='Bỏ qua mã '+t.slice(0,24)+' — đưa mã tracking vào khung';return}
  stopLoop();lookup(t)}
@@ -199,7 +203,7 @@ function tick(){if(!loopOn)return;var v=$('vid');
  if(v.videoWidth&&!busyDec&&window.ZXingWASM){busyDec=true;
   var w=v.videoWidth,h=v.videoHeight,ch=Math.round(h*.5);cv.width=w;cv.height=ch;
   var x=cv.getContext('2d',{willReadFrequently:true});x.drawImage(v,0,Math.round((h-ch)/2),w,ch,0,0,w,ch);
-  ZXingWASM.readBarcodes(x.getImageData(0,0,w,ch),{formats:FMT,tryHarder:true,maxNumberOfSymbols:4}).then(function(r){busyDec=false;
+  ZXingWASM.readBarcodes(x.getImageData(0,0,w,ch),{formats:CFG?FMT:FMT.concat('QRCode'),tryHarder:true,maxNumberOfSymbols:4}).then(function(r){busyDec=false;
    var codes=r.filter(function(b){return b.isValid!==false}).map(function(b){return b.text});
    if(codes.length&&loopOn)onScan(pickCode(codes)||codes[0])}).catch(function(){busyDec=false})}
  setTimeout(tick,60)}
@@ -238,6 +242,33 @@ $('photo').onchange=function(e){var f=e.target.files[0];if(!f)return;e.target.va
   beep(false);toast(codes.length?'Ảnh có '+codes.length+' mã nhưng không có mã tracking ('+codes.join(', ').slice(0,60)+')':'Không thấy mã vạch (ảnh '+(lastInfo||'?')+') — chụp cả tem, cách 20cm, đủ sáng','err')})
  .catch(function(err){beep(false);toast('Không đọc được mã: '+err.message,'err')})};
 
-if(!CFG){$('list').innerHTML='<div class="empty">⚠ Chưa kết nối.<br>Mở app cũ (Apps Script) → bấm <b>⚡ Mở bản quét nhanh</b> một lần trên máy này.</div>'}
+/* ---- màn hình kết nối: dán link/mã ngay trong app (dùng được cả ở biểu tượng màn hình chính) ---- */
+function parseCfg(txt){var m=String(txt||'').trim().match(/(?:c=)?([A-Za-z0-9_\-=]{20,})\s*$/);if(!m)return null;
+ try{var t=atob(m[1].replace(/-/g,'+').replace(/_/g,'/')).split('|');if(/^https:\/\//.test(t[0])&&t[1])return{api:t[0],k:t[1]}}catch(e){}return null}
+function saveCfg(c){CFG=c;try{localStorage.setItem('cfg',JSON.stringify(c))}catch(e){}
+ try{history.replaceState(null,'',location.pathname+'#c='+btoa(c.api+'|'+c.k).replace(/\+/g,'-').replace(/\//g,'_'))}catch(e){}}
+function showConnect(msg){$('upd').textContent='Chưa kết nối';
+ $('list').innerHTML='<div class="empty" style="padding:30px 16px">'+(msg?'<div style="color:#d33;margin-bottom:10px">'+msg+'</div>':'')+
+ '⚠ <b>Chưa kết nối</b><br><div class="small" style="margin:8px 0 14px;line-height:1.5">Trên máy <b>đã kết nối</b>, bấm nút <b>📲</b> góc trên → hiện mã QR.<br>Máy này bấm <b>📷 Quét QR kết nối</b> rồi đưa vào mã. Chỉ làm <b>1 lần</b>.</div>'+
+ '<button class="btn" id="cscan" style="width:100%;margin-bottom:10px">📷 Quét QR kết nối</button>'+
+ '<button class="btn gray" id="cpaste" style="width:100%;margin-bottom:10px">📋 Dán link kết nối</button>'+
+ '<textarea id="ctxt" placeholder="…hoặc dán tay link vào đây" style="width:100%;height:70px;border:1px solid #ccc;border-radius:10px;padding:8px;font-size:14px;box-sizing:border-box"></textarea>'+
+ '<button class="btn gray" id="cok" style="width:100%;margin-top:8px">Kết nối</button></div>';
+ function go(txt){var c=parseCfg(txt);if(!c){showConnect('Link chưa đúng — cần link có đoạn #c=…');return}
+  saveCfg(c);$('list').innerHTML='<div class="empty">⏳ Đang tải…</div>';load()}
+ $('cpaste').onclick=function(){if(navigator.clipboard&&navigator.clipboard.readText)navigator.clipboard.readText().then(go,function(){$('ctxt').focus()});else $('ctxt').focus()};
+ $('cok').onclick=function(){go($('ctxt').value)};$('cscan').onclick=openCam}
+function shareLink(){return location.origin+location.pathname+'#c='+btoa(CFG.api+'|'+CFG.k).replace(/\+/g,'-').replace(/\//g,'_')}
+function showShare(){if(!CFG){toast('Máy này chưa kết nối','err');return}
+ function draw(){var q=qrcode(0,'L');q.addData(shareLink());q.make();
+  $('sheet').innerHTML='<div style="text-align:center;padding:16px"><b style="font-size:18px">📲 Kết nối máy nhân viên</b>'+
+  '<div style="margin:14px auto;background:#fff;display:inline-block;padding:10px">'+q.createImgTag(5,0)+'</div>'+
+  '<div class="small" style="line-height:1.5;color:#555">Máy nhân viên: mở app Nhận hàng → <b>📷 Quét QR kết nối</b> → đưa vào mã này.<br>(Hoặc dùng Camera iPhone quét → mở link → Chia sẻ → <b>Thêm vào MH chính</b>)<br><b style="color:#b91c1c">Mã này = chìa khoá vào file NCC, chỉ đưa người tin cậy.</b></div>'+
+  '<button class="btn gray" id="cpy" style="width:100%;margin-top:12px">📋 Sao chép link (gửi Zalo)</button></div>';
+  $('mask').style.display='block';$('sbar').style.display='flex';$('snext').style.display='none';setTimeout(function(){$('sheet').classList.add('open')},10);
+  $('cpy').onclick=function(){navigator.clipboard.writeText(shareLink()).then(function(){toast('Đã sao chép link','ok')})}}
+ if(window.qrcode)draw();else{var sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';sc.onload=draw;sc.onerror=function(){toast('Không tải được bộ tạo QR','err')};document.head.appendChild(sc)}}
+$('share').onclick=showShare;
+if(!CFG)showConnect();
 else load();
 </script></body></html>
