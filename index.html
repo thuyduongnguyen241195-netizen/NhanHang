@@ -62,11 +62,24 @@ header{padding-top:max(12px,env(safe-area-inset-top))}
 .odb{font-size:11px;background:#fee2e2;color:#b91c1c;border-radius:6px;padding:1px 6px;margin-left:4px}
 .empty{text-align:center;padding:40px 10px;color:#888}
 .lnk{color:#2563eb;font-size:13px;text-decoration:none}
+.rbar{margin-top:10px;display:flex;gap:6px}
+.rbar button{border:0;border-radius:10px;padding:9px 10px;font-size:14px;font-weight:700}
+.rbar .rv{flex:1;background:#fff;color:#16a34a;text-align:left}
+.rbar .rf{background:#16a34a;color:#fff}
+.rl{display:flex;justify-content:space-between;gap:8px;background:#fff;border-radius:10px;padding:9px 11px;margin-bottom:6px;font-size:14px}
+.rl b{word-break:break-all}
+.tk{background:#fff;border-radius:14px;padding:12px;margin-bottom:10px}
+.tk h3{margin:0 0 6px;font-size:17px}
+.tk .ln{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;color:#444}
+.tk .st{font-size:13px;border-radius:8px;padding:7px 9px;margin-top:8px;background:#f3f4f6}
+.tk .st.g{background:#dcfce7;color:#166534}.tk .st.y{background:#fef9c3;color:#854d0e}.tk .st.r{background:#fee2e2;color:#991b1b}
+.btn.blue{background:#2563eb}
 </style></head><body>
 <header>
  <div class="top"><div><h1>📦 Nhận hàng</h1><small id="upd">Đang tải…</small></div><div><button class="ref" id="share" title="Kết nối máy nhân viên" style="margin-right:6px">📲</button><button class="ref" id="ref">⟳</button></div></div>
  <div class="chips" id="chips"></div>
  <div id="doi"></div>
+ <div class="rbar" id="rbar" style="display:none"><button class="rv" id="rview"></button><button class="rf" id="rfin">📦 Đã nhận hết</button></div>
  <div class="sbox"><input id="q" inputmode="numeric" placeholder="🔍 Gõ số cuối tracking…"></div>
 </header>
 <div class="list" id="list"></div>
@@ -94,7 +107,7 @@ function call(fn,args){if(!CFG)return Promise.reject(new Error('Chưa kết nố
  return fetch(CFG.api,{method:'POST',body:JSON.stringify({fn:fn,args:args,k:CFG.k})})
   .then(function(r){return r.json()}).then(function(j){if(j.error)throw new Error(j.error);return j.result})}
 function mkRun(ok,fail){var o={withSuccessHandler:function(f){return mkRun(f,fail)},withFailureHandler:function(f){return mkRun(ok,f)}};
- ['apiIndex','apiRefresh','apiReceive','apiUndo'].forEach(function(n){o[n]=function(){call(n,[].slice.call(arguments)).then(ok||function(){},fail||function(e){toast(e.message,'err')})}});return o}
+ ['apiIndex','apiRefresh','apiReceive','apiUndo','apiTongKet','apiChot','apiUpSapo'].forEach(function(n){o[n]=function(){call(n,[].slice.call(arguments)).then(ok||function(){},fail||function(e){toast(e.message,'err')})}});return o}
 var google={script:{run:mkRun()}};
 var FL={KR:'🇰🇷',JP:'🇯🇵',US:'🇺🇸'},NM={KR:'Hàn',JP:'Nhật',US:'Mỹ'};
 var KGS=['0,2','0,3','0,4','0,5','0,6','0,7','0,8','0,9','1'];
@@ -180,10 +193,10 @@ function receive(it,n,kg){var b=$('b'+n);if(b.dataset.busy)return;b.dataset.busy
    if(it.c!=='KR')a.innerHTML='<div class="total" style="background:#dcfce7">✅ Đã nhận '+r.date+' · dòng '+r.row+'</div>';
    else a.insertAdjacentHTML('beforeend','<div class="total" style="background:#dcfce7">✅ Đã ghi '+kg+'kg + ngày '+r.date+' · dòng '+r.row+'</div>');
    a.querySelectorAll('.kgs button').forEach(function(x){x.disabled=true});
-   toast('✅ Đã nhận '+it.tr,'ok','Hoàn tác',function(){undo(it,r.row,kg)})})
+   recvAdd(it,r,kg);if(r.warn)toast('⚠ Đã ghi ngày nhận nhưng chưa vào File Sapo: '+r.warn,'err');else toast('✅ Đã nhận '+it.tr,'ok','Hoàn tác',function(){undo(it,r.row,kg)})})
  .withFailureHandler(function(e){b.dataset.busy='';delete hidden[key(it)];ls('hidden',hidden);b.classList.remove('done');render();beep(false);toast(e.message,'err');actions(it,n)})
  .apiReceive(it,kg)}
-function undo(it,row,kg){google.script.run.withSuccessHandler(function(){delete hidden[key(it)];ls('hidden',hidden);render();toast('Đã hoàn tác','')})
+function undo(it,row,kg){google.script.run.withSuccessHandler(function(){delete hidden[key(it)];ls('hidden',hidden);recvDel(it);render();toast('Đã hoàn tác','')})
  .withFailureHandler(function(e){toast(e.message,'err')}).apiUndo(it,row,kg)}
 
 /* ---- camera ---- */
@@ -241,6 +254,55 @@ $('photo').onchange=function(e){var f=e.target.files[0];if(!f)return;e.target.va
   if(c){$('toast').style.display='none';lookup(c);return}
   beep(false);toast(codes.length?'Ảnh có '+codes.length+' mã nhưng không có mã tracking ('+codes.join(', ').slice(0,60)+')':'Không thấy mã vạch (ảnh '+(lastInfo||'?')+') — chụp cả tem, cách 20cm, đủ sáng','err')})
  .catch(function(err){beep(false);toast('Không đọc được mã: '+err.message,'err')})};
+
+/* ---- danh sách đã nhận hôm nay + chốt + up Sapo ---- */
+function day0(){var d=new Date();d.setHours(0,0,0,0);return d.getTime()}
+function recvAll(){var a=ls('recv')||[],t=day0();a=a.filter(function(x){return x.at>=t});ls('recv',a);return a}
+function recvAdd(it,r,kg){var a=recvAll().filter(function(x){return x.k!==key(it)});a.push({k:key(it),c:it.c,tr:it.tr,p:it.p,kg:kg||'',t:it.t,row:r.row,at:Date.now(),it:it});ls('recv',a);recvBar()}
+function recvDel(it){ls('recv',recvAll().filter(function(x){return x.k!==key(it)}));recvBar()}
+function recvBar(){var a=recvAll();$('rbar').style.display=a.length?'flex':'none';
+ var n={KR:0,JP:0,US:0};a.forEach(function(x){n[x.c]++});
+ $('rview').textContent='✅ Đã nhận hôm nay: '+a.length+' món ('+['KR','JP','US'].filter(function(c){return n[c]}).map(function(c){return FL[c]+n[c]}).join(' ')+') ›'}
+function showSheet(h,noNext){$('sheet').innerHTML=h;$('mask').style.display='block';$('sbar').style.display='flex';$('snext').style.display=noNext?'none':'';setTimeout(function(){$('sheet').classList.add('open')},10)}
+$('rview').onclick=function(){var a=recvAll().slice().reverse();
+ var h='<div class="sh-h"><span>Đã nhận hôm nay</span><span>'+a.length+' món</span></div>'+a.map(function(x){
+  return'<div class="rl"><span><span class="flag">'+FL[x.c]+'</span><b>'+esc(x.tr)+'</b><br><span class="small" style="color:#888">tab '+esc(x.t)+' · dòng '+x.row+(x.kg?' · '+esc(x.kg)+'kg':'')+' · '+new Date(x.at).toTimeString().slice(0,5)+'</span></span><span class="price">'+vnd(x.p)+'</span></div>'}).join('')+
+  '<button class="btn green" id="rfin2">📦 Đã nhận toàn bộ hàng</button>';
+ showSheet(h,true);$('rfin2').onclick=finish};
+$('rfin').onclick=finish;
+function finish(){var a=recvAll(),cs=['KR','JP','US'].filter(function(c){return a.some(function(x){return x.c===c})});
+ if(!cs.length){toast('Hôm nay chưa nhận món nào','err');return}
+ if(!confirm('Chốt đã nhận hết hàng hôm nay ('+cs.map(function(c){return NM[c]}).join(', ')+')?\n'+(cs.indexOf('US')>=0?'Kiện Mỹ sẽ được tick "Đã nhận đủ" và chia tiền cân.':'')))return;
+ showSheet('<div class="empty">⏳ Đang chốt và cập nhật File Sapo…</div>',true);
+ google.script.run.withSuccessHandler(function(res){renderSum(res,a)}).withFailureHandler(function(e){showSheet('<div class="empty" style="color:#dc2626">'+esc(e.message)+'</div>',true)}).apiChot(cs)}
+function renderSum(res,a){var cs=Object.keys(res),tongM=0,tongT=0;
+ var h='<div class="sh-h"><span>Tổng kết nhận hàng</span><span>'+new Date().toLocaleDateString('vi-VN')+'</span></div>';
+ cs.forEach(function(c){var r=res[c]||{},nApp=a.filter(function(x){return x.c===c}).length;
+  h+='<div class="tk"><h3>'+FL[c]+' '+NM[c]+(r.ten?' · '+esc(r.ten):'')+'</h3>';
+  if(r.loiHT){h+='<div class="st r">'+esc(r.loiHT)+'</div></div>';return}
+  if(!r.co){h+='<div class="st y">Chưa có File Sapo'+(r.choKien?' — '+r.choKien+' món chờ NCC ghi "CÂN HÀNG VỀ"':'')+'</div></div>';return}
+  tongM+=r.soMon;tongT+=r.tong;
+  h+='<div class="ln"><span>Nhận hôm nay (app)</span><b>'+nApp+' món</b></div><div class="ln"><span>Trong File Sapo</span><b>'+r.soMon+' món</b></div>'+
+   (r.tienCan?'<div class="ln"><span>Tiền cân (đã chia vào giá)</span><b>'+vnd(r.tienCan)+'</b></div>':'')+
+   '<div class="ln"><span>Tổng giá vốn</span><b class="price">'+vnd(r.tong)+'</b></div>'+
+   (r.choKien?'<div class="st y">'+r.choKien+' món Mỹ chưa có kiện (chờ NCC ghi "CÂN HÀNG VỀ")</div>':'')+
+   '<div class="st '+(r.san?'g':'y')+'">'+esc(r.tt)+'</div>';
+  if(r.up)h+='<div class="st '+(/^✓/.test(r.up)?'g':/^⚠/.test(r.up)?'r':'y')+'">Sapo: '+esc(r.up)+'</div>';
+  if(r.san&&!/^(✓|CHỜ|ĐANG)/.test(r.up))h+='<button class="btn" data-up="'+c+'" data-key="'+esc(r.key)+'">⚡ Up Sapo tự động</button>';
+  if(r.id)h+='<a class="btn blue" style="display:block;text-align:center;text-decoration:none" target="_blank" href="https://docs.google.com/spreadsheets/d/'+esc(r.id)+'/export?format=xlsx">📥 Tải file để tự up</a>';
+  h+='<div id="u'+c+'"></div></div>'});
+ h+='<div class="tk"><div class="ln"><span>Tổng cộng</span><b>'+tongM+' món · '+vnd(tongT)+'</b></div>'+
+  '<div class="small" style="color:#666;line-height:1.5;margin-top:6px">⚡ <b>Up tự động</b>: Claude up lên Sapo trong vòng 1 giờ (8h–22h), tự kiểm tra rồi báo kết quả.<br>📥 <b>Tự up ngay</b>: tải file → Sapo → Sản phẩm → Nhập file → Nhập file sản phẩm thường → chọn file.</div></div>';
+ showSheet(h,true);
+ Array.prototype.forEach.call(document.querySelectorAll('[data-up]'),function(b){b.onclick=function(){upSapo(b,b.dataset.up,b.dataset.key,false)}})}
+function upSapo(b,c,k,force){b.disabled=true;b.textContent='⏳ Đang gửi…';
+ google.script.run.withSuccessHandler(function(r){var u=$('u'+c);
+   if(r&&r.loi){b.disabled=false;b.textContent='⚡ Up Sapo tự động';
+    u.innerHTML='<div class="st r"><b>Có '+r.loi.length+' vấn đề:</b><br>'+r.loi.map(esc).join('<br>')+'</div><button class="btn gray" id="f'+c+'">Vẫn up</button>';
+    $('f'+c).onclick=function(){u.innerHTML='';upSapo(b,c,k,true)};return}
+   b.remove();u.innerHTML='<div class="st g">✓ '+esc(r&&r.msg||'Đã gửi')+' — Claude sẽ up trong vòng 1 giờ</div>';toast('Đã gửi yêu cầu up Sapo','ok')})
+ .withFailureHandler(function(e){b.disabled=false;b.textContent='⚡ Up Sapo tự động';toast(e.message,'err')}).apiUpSapo(c,k,force)}
+recvBar();
 
 /* ---- màn hình kết nối: dán link/mã ngay trong app (dùng được cả ở biểu tượng màn hình chính) ---- */
 function parseCfg(txt){var m=String(txt||'').trim().match(/(?:c=)?([A-Za-z0-9_\-=]{20,})\s*$/);if(!m)return null;
