@@ -287,6 +287,7 @@ function renderSum(res,a){var cs=Object.keys(res),tongM=0,tongT=0;
    (r.tienCan?'<div class="ln"><span>Tiền cân (đã chia vào giá)</span><b>'+vnd(r.tienCan)+'</b></div>':'')+
    '<div class="ln"><span>Tổng giá vốn</span><b class="price">'+vnd(r.tong)+'</b></div>'+
    (r.choKien?'<div class="st y">'+r.choKien+' món Mỹ chưa có kiện (chờ NCC ghi "CÂN HÀNG VỀ")</div>':'')+
+   (r.sot&&r.sot.length?'<div class="st r">⚠ '+r.sot.length+' món có ngày nhận nhưng chưa vào File Sapo: '+esc(r.sot.slice(0,8).join(', '))+(r.sot.length>8?'…':'')+' — báo chủ shop xử lý trước khi up</div>':'')+
    '<div class="st '+(r.san?'g':'y')+'">'+esc(r.tt)+'</div>';
   if(r.up)h+='<div class="st '+(/^✓/.test(r.up)?'g':/^⚠/.test(r.up)?'r':'y')+'">Sapo: '+esc(r.up)+'</div>';
   if(r.san&&!/^(✓|CHỜ|ĐANG)/.test(r.up))h+='<button class="btn" data-up="'+c+'" data-key="'+esc(r.key)+'">⚡ Up Sapo tự động</button>';
