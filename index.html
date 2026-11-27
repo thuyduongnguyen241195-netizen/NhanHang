@@ -315,6 +315,7 @@ function qRun(cb){if(qBusy){setTimeout(function(){qRun(cb)},800);return}
   .withFailureHandler(function(e){qBusy=false;toast('⚠ Chưa vào File Sapo ('+NM[c]+'): '+e.message+' — tự thử lại','err');qKick(15000);if(cb)cb(e)})
   .apiNhanLo(c,ds.map(function(x){return{tab:x.tab,row:x.row,kg:x.kg||''}}))}
 window.addEventListener('pagehide',function(){if(Q.length&&!qBusy)qRun()});
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&Q.length)qKick(300)});
 if(Q.length&&CFG)qKick(1500);
 
 /* ---- màn hình kết nối: dán link/mã ngay trong app (dùng được cả ở biểu tượng màn hình chính) ---- */
