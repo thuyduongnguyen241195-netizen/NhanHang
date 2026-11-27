@@ -107,7 +107,7 @@ function call(fn,args){if(!CFG)return Promise.reject(new Error('Chưa kết nố
  return fetch(CFG.api,{method:'POST',body:JSON.stringify({fn:fn,args:args,k:CFG.k})})
   .then(function(r){return r.json()}).then(function(j){if(j.error)throw new Error(j.error);return j.result})}
 function mkRun(ok,fail){var o={withSuccessHandler:function(f){return mkRun(f,fail)},withFailureHandler:function(f){return mkRun(ok,f)}};
- ['apiIndex','apiRefresh','apiReceive','apiUndo','apiTongKet','apiChot','apiUpSapo'].forEach(function(n){o[n]=function(){call(n,[].slice.call(arguments)).then(ok||function(){},fail||function(e){toast(e.message,'err')})}});return o}
+ ['apiIndex','apiRefresh','apiReceive','apiUndo','apiTongKet','apiChot','apiUpSapo','apiNhanLo'].forEach(function(n){o[n]=function(){call(n,[].slice.call(arguments)).then(ok||function(){},fail||function(e){toast(e.message,'err')})}});return o}
 var google={script:{run:mkRun()}};
 var FL={KR:'🇰🇷',JP:'🇯🇵',US:'🇺🇸'},NM={KR:'Hàn',JP:'Nhật',US:'Mỹ'};
 var KGS=['0,2','0,3','0,4','0,5','0,6','0,7','0,8','0,9','1'];
@@ -193,7 +193,7 @@ function receive(it,n,kg){var b=$('b'+n);if(b.dataset.busy)return;b.dataset.busy
    if(it.c!=='KR')a.innerHTML='<div class="total" style="background:#dcfce7">✅ Đã nhận '+r.date+' · dòng '+r.row+'</div>';
    else a.insertAdjacentHTML('beforeend','<div class="total" style="background:#dcfce7">✅ Đã ghi '+kg+'kg + ngày '+r.date+' · dòng '+r.row+'</div>');
    a.querySelectorAll('.kgs button').forEach(function(x){x.disabled=true});
-   recvAdd(it,r,kg);if(r.warn)toast('⚠ Đã ghi ngày nhận nhưng chưa vào File Sapo: '+r.warn,'err');else toast('✅ Đã nhận '+it.tr,'ok','Hoàn tác',function(){undo(it,r.row,kg)})})
+   recvAdd(it,r,kg);qAdd(it,r.row);if(r.warn)toast('⚠ Đã ghi ngày nhận nhưng chưa vào File Sapo: '+r.warn,'err');else toast('✅ Đã nhận '+it.tr,'ok','Hoàn tác',function(){undo(it,r.row,kg)})})
  .withFailureHandler(function(e){b.dataset.busy='';delete hidden[key(it)];ls('hidden',hidden);b.classList.remove('done');render();beep(false);toast(e.message,'err');actions(it,n)})
  .apiReceive(it,kg)}
 function undo(it,row,kg){google.script.run.withSuccessHandler(function(){delete hidden[key(it)];ls('hidden',hidden);recvDel(it);render();toast('Đã hoàn tác','')})
@@ -270,7 +270,8 @@ $('rview').onclick=function(){var a=recvAll().slice().reverse();
   '<button class="btn green" id="rfin2">📦 Đã nhận toàn bộ hàng</button>';
  showSheet(h,true);$('rfin2').onclick=finish};
 $('rfin').onclick=finish;
-function finish(){var a=recvAll(),cs=['KR','JP','US'].filter(function(c){return a.some(function(x){return x.c===c})});
+function finish(){if(Q.length){showSheet('<div class="empty">⏳ Đang đưa '+Q.length+' món vào File Sapo…</div>',true);qRun(function(e){if(e)showSheet('<div class="empty" style="color:#dc2626">Chưa đưa được món vào File Sapo: '+esc(e.message)+'<br>Thử lại sau ít phút.</div>',true);else{closeSheet();finish()}});return}
+ var a=recvAll(),cs=['KR','JP','US'].filter(function(c){return a.some(function(x){return x.c===c})});
  if(!cs.length){toast('Hôm nay chưa nhận món nào','err');return}
  if(!confirm('Chốt đã nhận hết hàng hôm nay ('+cs.map(function(c){return NM[c]}).join(', ')+')?\n'+(cs.indexOf('US')>=0?'Kiện Mỹ sẽ được tick "Đã nhận đủ" và chia tiền cân.':'')))return;
  showSheet('<div class="empty">⏳ Đang chốt và cập nhật File Sapo…</div>',true);
@@ -303,6 +304,18 @@ function upSapo(b,c,k,force){b.disabled=true;b.textContent='⏳ Đang gửi…';
    b.remove();u.innerHTML='<div class="st g">✓ '+esc(r&&r.msg||'Đã gửi')+' — Claude sẽ up trong vòng 1 giờ</div>';toast('Đã gửi yêu cầu up Sapo','ok')})
  .withFailureHandler(function(e){b.disabled=false;b.textContent='⚡ Up Sapo tự động';toast(e.message,'err')}).apiUpSapo(c,k,force)}
 recvBar();
+/* ---- hàng đợi: gom món vừa quét, gửi file NCC 1 lần (File Sapo vẽ lại 1 lần) -> quét không phải chờ ---- */
+var Q=ls('hookQ')||[],qT=null,qBusy=false;
+function qAdd(it,row){Q.push({c:it.c,tab:it.t,row:row});ls('hookQ',Q);qKick(2500)}
+function qKick(ms){clearTimeout(qT);qT=setTimeout(function(){qRun()},ms)}
+function qRun(cb){if(qBusy){setTimeout(function(){qRun(cb)},800);return}
+ if(!Q.length){if(cb)cb();return}
+ var c=Q[0].c,ds=Q.filter(function(x){return x.c===c});qBusy=true;
+ google.script.run.withSuccessHandler(function(){Q=Q.filter(function(x){return ds.indexOf(x)<0});ls('hookQ',Q);qBusy=false;if(Q.length)qRun(cb);else if(cb)cb()})
+  .withFailureHandler(function(e){qBusy=false;toast('⚠ Chưa vào File Sapo ('+NM[c]+'): '+e.message+' — tự thử lại','err');qKick(15000);if(cb)cb(e)})
+  .apiNhanLo(c,ds.map(function(x){return{tab:x.tab,row:x.row}}))}
+window.addEventListener('pagehide',function(){if(Q.length&&!qBusy)qRun()});
+if(Q.length&&CFG)qKick(1500);
 
 /* ---- màn hình kết nối: dán link/mã ngay trong app (dùng được cả ở biểu tượng màn hình chính) ---- */
 function parseCfg(txt){var m=String(txt||'').trim().match(/(?:c=)?([A-Za-z0-9_\-=]{20,})\s*$/);if(!m)return null;
