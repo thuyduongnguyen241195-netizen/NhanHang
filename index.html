@@ -118,6 +118,7 @@ function mkRun(ok,fail){var o={withSuccessHandler:function(f){return mkRun(f,fai
 var google={script:{run:mkRun()}};
 var FL={KR:'🇰🇷',JP:'🇯🇵',US:'🇺🇸'},NM={KR:'Hàn',JP:'Nhật',US:'Mỹ'};
 var KGS=['0,2','0,3','0,4','0,5','0,6','0,7','0,8','0,9','1'];
+var PEND={};
 var D={items:[],rate:135000},filt='ALL',hidden={},scanner=null,camOn=false,useFile=false,lastCode='',lastT=0,toastT;
 function $(i){return document.getElementById(i)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -171,7 +172,7 @@ function lookup(code){var q=dig(code);if(q.length<4)return;
 
 /* ---- bảng món (bottom sheet) ---- */
 var cur=[];
-function openSheet(m,code){cur=m;var h='<div class="sh-h"><span>'+esc(code)+'</span><span>'+(m.length?m.length+' món':'')+'</span></div>';
+function openSheet(m,code){cur=m;PEND={};$('snext').textContent='▣ Quét tiếp';var h='<div class="sh-h"><span>'+esc(code)+'</span><span>'+(m.length?m.length+' món':'')+'</span></div>';
  if(!m.length)h+='<div class="big" style="text-align:center"><div style="font-size:40px">❓</div><b>Không có trong danh sách chờ nhận</b><div class="small" style="color:#666;margin-top:6px">Có thể món đã nhận rồi, hoặc NCC vừa thêm tracking.</div><button class="btn" id="rtry">⟳ Làm mới rồi tìm lại</button></div>';
  m.forEach(function(it,n){h+='<div class="big" id="b'+n+'">'+(it.img?'<img referrerpolicy="no-referrer" src="'+esc(it.img)+'" onerror="this.remove()">':'')+
   '<div class="row"><span><span class="flag">'+FL[it.c]+' '+NM[it.c]+'</span>tab '+esc(it.t)+' · dòng '+it.r+(it.od?'<span class="odb">Quá hạn – NCC chịu</span>':'')+'</span><a class="lnk" href="'+esc(it.l)+'" target="_blank">Link ↗</a></div>'+
@@ -181,7 +182,9 @@ function openSheet(m,code){cur=m;var h='<div class="sh-h"><span>'+esc(code)+'</s
  if($('rtry'))$('rtry').onclick=function(){this.textContent='Đang làm mới…';google.script.run.withSuccessHandler(function(j){setData(j);lookup(code)}).apiRefresh()};
  $('mask').style.display='block';$('sbar').style.display='flex';setTimeout(function(){$('sheet').classList.add('open')},10)}
 function closeSheet(){$('snext').style.display='';$('sheet').classList.remove('open');$('mask').style.display='none';$('sbar').style.display='none'}
-$('mask').onclick=closeSheet;$('sclose').onclick=closeSheet;$('snext').onclick=function(){closeSheet();openCam()};
+function savePend(){Object.keys(PEND).forEach(function(n){if(cur&&cur[n])receive(cur[n],+n,PEND[n])});PEND={}}
+function dongSheet(){if(Object.keys(PEND).length&&confirm('Đã chọn cân nhưng CHƯA LƯU.\nOK = lưu món này · Huỷ = đóng không lưu'))savePend();PEND={};closeSheet()}
+$('mask').onclick=dongSheet;$('sclose').onclick=dongSheet;$('snext').onclick=function(){savePend();closeSheet();openCam()};
 
 function actions(it,n){var a=$('a'+n);
  if(!$('qw'+n)){a.insertAdjacentHTML('beforebegin','<div class="qty" id="qw'+n+'">Số áo trong món này: <button data-d="-1">−</button><b id="q'+n+'">1</b><button data-d="1">+</button><span class="small" style="color:#888;width:100%">Lô nhiều áo: giá và cân chia đều cho từng áo trong File Sapo</span></div>');
@@ -192,7 +195,7 @@ function actions(it,n){var a=$('a'+n);
   var k=b.textContent;if(b.dataset.o){k=prompt('Cân nặng (kg), vd 1,2');if(!k)return;k=k.replace('.',',')}
   Array.prototype.forEach.call(a.querySelectorAll('.kgs button'),function(x){x.classList.remove('on')});b.classList.add('on');
   var sl=+(($('q'+n)||{}).textContent)||1,jp=it.c==='JP',base=jp?it.p-(it.sh||0):it.p,fee=kgNum(k)*(jp?170000:D.rate);$('t'+n).innerHTML='<div class="total">Giá '+vnd(base)+(jp?' (đã bỏ ship NCC)':'')+' + cân '+k+'kg ('+vnd(fee)+')<br>TỔNG: <b>'+vnd(base+fee)+'</b>'+(sl>1?'<br>÷ '+sl+' áo = <b>'+vnd((base+fee)/sl)+'</b> / áo':'')+'</div>';
-  receive(it,n,k)}})}
+  PEND[n]=k;$('snext').textContent='💾 Lưu & quét tiếp'}})}   // chọn cân chưa lưu: bấm 'Lưu & quét tiếp' mới lưu
 
 /* ---- ghi nhận: chạy nền, không bắt chờ ---- */
 function receive(it,n,kg){var b=$('b'+n);if(b.dataset.busy)return;var sl=+(($('q'+n)||{}).textContent)||1;b.dataset.busy=1;
