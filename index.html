@@ -74,6 +74,9 @@ header{padding-top:max(12px,env(safe-area-inset-top))}
 .tk .st{font-size:13px;border-radius:8px;padding:7px 9px;margin-top:8px;background:#f3f4f6}
 .tk .st.g{background:#dcfce7;color:#166534}.tk .st.y{background:#fef9c3;color:#854d0e}.tk .st.r{background:#fee2e2;color:#991b1b}
 .btn.blue{background:#2563eb}
+.fab{left:12px;transform:none;width:calc(62% - 18px);padding:18px 0}
+.fab2{position:fixed;right:12px;bottom:22px;z-index:6;width:calc(38% - 18px);padding:18px 0;border-radius:34px;border:2px solid #ee4d2d;background:#fff;color:#ee4d2d;font-size:17px;font-weight:700;box-shadow:0 6px 18px #0002}
+.kin{width:100%;padding:16px;font-size:24px;letter-spacing:1px;border:2px solid #ee4d2d;border-radius:12px;text-align:center}
 </style></head><body>
 <header>
  <div class="top"><div><h1>📦 Nhận hàng</h1><small id="upd">Đang tải…</small></div><div><button class="ref" id="share" title="Kết nối máy nhân viên" style="margin-right:6px">📲</button><button class="ref" id="ref">⟳</button></div></div>
@@ -84,6 +87,7 @@ header{padding-top:max(12px,env(safe-area-inset-top))}
 </header>
 <div class="list" id="list"></div>
 <button class="fab" id="fab">▣ QUÉT MÃ</button>
+<button class="fab2" id="kbd">⌨ Nhập mã</button>
 
 <div id="cam"><div class="camtop"><span>Đưa mã vạch vào khung</span><button id="camx">✕ Đóng</button></div>
  <video id="vid" playsinline muted autoplay></video><div class="frame"></div>
@@ -233,6 +237,12 @@ function openCam(){
    tick()})
  .catch(function(e){camOn=false;useFile=true;$('cam').style.display='none';toast('Không mở được camera ('+e.name+') — dùng chụp ảnh','');$('photo').click()})}
 $('fab').onclick=openCam;
+// Nhập mã tay (mã không quét được) — mặc định bàn phím số
+$('kbd').onclick=function(){
+ showSheet('<div class="sh-h"><span>⌨ Nhập mã tracking</span></div><input id="kin" class="kin" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="Gõ mã hoặc vài số cuối"><div style="display:flex;justify-content:space-between;align-items:center;margin:8px 2px;color:#666;font-size:13px"><span>Gõ cả mã hoặc ít nhất 4 số cuối</span><button class="btn gray" id="kabc" style="width:auto;margin:0;padding:8px 14px;font-size:14px">ABC</button></div><button class="btn" id="kgo">🔍 Tìm món</button>',true);
+ var i=$('kin');i.focus();
+ function go(){var v=i.value.trim();if(dig(v).length<4){toast('Gõ ít nhất 4 số','err');i.focus();return}closeSheet();lookup(v)}
+ $('kabc').onclick=function(){var t=i.getAttribute('inputmode')==='numeric';i.setAttribute('inputmode',t?'text':'numeric');if(t)i.removeAttribute('pattern');else i.setAttribute('pattern','[0-9]*');this.textContent=t?'123':'ABC';i.blur();setTimeout(function(){i.focus()},50)};$('kgo').onclick=go;i.onkeydown=function(e){if(e.key==='Enter')go()}};
 $('camx').onclick=stopLoop;
 document.addEventListener('visibilitychange',function(){if(document.hidden&&stream){stream.getTracks().forEach(function(t){t.stop()});stream=null;stopLoop()}});
 // Chế độ chụp ảnh (dự phòng)
@@ -287,7 +297,6 @@ function renderSum(res,a){var cs=Object.keys(res),tongM=0,tongT=0;
    (r.tienCan?'<div class="ln"><span>Tiền cân (đã chia vào giá)</span><b>'+vnd(r.tienCan)+'</b></div>':'')+
    '<div class="ln"><span>Tổng giá vốn</span><b class="price">'+vnd(r.tong)+'</b></div>'+
    (r.choKien?'<div class="st y">'+r.choKien+' món Mỹ chưa có kiện (chờ NCC ghi "CÂN HÀNG VỀ")</div>':'')+
-   (r.sot&&r.sot.length?'<div class="st r">⚠ '+r.sot.length+' món có ngày nhận nhưng chưa vào File Sapo: '+esc(r.sot.slice(0,8).join(', '))+(r.sot.length>8?'…':'')+' — báo chủ shop xử lý trước khi up</div>':'')+
    '<div class="st '+(r.san?'g':'y')+'">'+esc(r.tt)+'</div>';
   if(r.up)h+='<div class="st '+(/^✓/.test(r.up)?'g':/^⚠/.test(r.up)?'r':'y')+'">Sapo: '+esc(r.up)+'</div>';
   if(r.san&&!/^(✓|CHỜ|ĐANG)/.test(r.up))h+='<button class="btn" data-up="'+c+'" data-key="'+esc(r.key)+'">⚡ Up Sapo tự động</button>';
