@@ -68,6 +68,10 @@ header{padding-top:max(12px,env(safe-area-inset-top))}
 .rbar .rf{background:#16a34a;color:#fff}
 .rl{display:flex;justify-content:space-between;gap:8px;background:#fff;border-radius:10px;padding:9px 11px;margin-bottom:6px;font-size:14px}
 .rl b{word-break:break-all}
+.rl .stt{flex:none;min-width:52px;height:52px;padding:0 6px;border-radius:12px;background:#111827;color:#fff;font-weight:800;font-size:22px;display:flex;align-items:center;justify-content:center}
+.rl .stt.cho{background:#e5e7eb;color:#6b7280;font-size:11px;font-weight:600;text-align:center;line-height:1.2}
+.rl .ph{flex:none;width:56px;height:56px;border-radius:8px;object-fit:cover;background:#f3f4f6}
+.rl .lk{display:inline-block;margin:4px 8px 0 0;font-size:12px;color:#2563eb;text-decoration:none;border:1px solid #bfdbfe;border-radius:6px;padding:1px 6px}
 .rx{border:0;background:#fee2e2;color:#dc2626;border-radius:8px;padding:6px 10px;margin-left:8px;font-size:14px}
 .tk{background:#fff;border-radius:14px;padding:12px;margin-bottom:10px}
 .tk h3{margin:0 0 6px;font-size:17px}
@@ -281,7 +285,7 @@ function svKeys(){var sk={};if(SV)['KR','JP','US'].forEach(function(c){var r=SV[
 function recvAll(){var a=ls('recv')||[],sk=svKeys(),now=Date.now(),q=Q||[];
  a=a.filter(function(x){return x.row&&!sk[x.c+'|'+x.t+'|'+x.row]&&(now-x.at<600000||q.some(function(y){return y.c===x.c&&y.tab===x.t&&y.row==x.row}))});ls('recv',a);
  var out=[];if(SV)['KR','JP','US'].forEach(function(c){var r=SV[c];if(r&&r.items)r.items.forEach(function(x){var it={c:c,t:x.t,tr:x.tr,l:x.l,p:x.p};
-  out.push({k:key(it),c:c,tr:x.tr,p:x.p,kg:x.kg||'',sl:x.sl||1,t:x.t,row:x.row,at:x.at||0,it:it})})});
+  out.push({k:key(it),c:c,tr:x.tr,p:x.p,kg:x.kg||'',sl:x.sl||1,t:x.t,row:x.row,at:x.at||0,it:it,stt:x.stt||0,img:x.img||'',l:x.l||'',mat:!!x.mat,ss:r.ss||'',gid:(r.gid||{})[x.t]})})});
  return out.concat(a)}
 function recvAdd(it,r,kg,sl){var a=(ls('recv')||[]).filter(function(x){return x.k!==key(it)});a.push({k:key(it),c:it.c,tr:it.tr,p:it.p,kg:kg||'',sl:sl||1,t:it.t,row:r.row,at:Date.now(),it:it});ls('recv',a);recvBar()}
 function recvDel(it,row){ls('recv',(ls('recv')||[]).filter(function(x){return x.k!==key(it)}));
@@ -297,8 +301,15 @@ function recvBar(){var all=recvAll(),a=filt==='ALL'?all:all.filter(function(x){r
  if(filt==='ALL'){$('rview').textContent='✅ Đang nhận: '+['KR','JP','US'].filter(function(c){return n[c]}).map(function(c){return FL[c]+' '+n[c]}).join(' · ')+' ›';$('rfin').textContent='📦 Chốt từng nước'}
  else{$('rview').textContent='✅ '+FL[filt]+' Đang nhận: '+sumTxt(a)+' ›';$('rfin').textContent='📦 Đã nhận hết '+NM[filt]}}
 function showSheet(h,noNext){LISTOPEN=false;$('sheet').innerHTML=h;$('mask').style.display='block';$('sbar').style.display='flex';$('snext').style.display=noNext?'none':'';setTimeout(function(){$('sheet').classList.add('open')},10)}
-function rowHtml(x,i){return'<div class="rl"><span><span class="flag">'+FL[x.c]+'</span><b>'+esc(x.tr)+'</b><br><span class="small" style="color:#888">tab '+esc(x.t)+' · dòng '+x.row+(x.kg?' · '+esc(x.kg)+'kg':'')+(x.sl>1?' · <b>'+x.sl+' áo</b>':'')+(x.at?' · '+new Date(x.at).toTimeString().slice(0,5):'')+'</span></span><span style="display:flex;align-items:center"><span class="price">'+vnd(x.p)+'</span><button class="rx" data-i="'+i+'">✕</button></span></div>'}
-function showList(){var all=recvAll().slice().sort(function(x,y){return y.at-x.at}),cs=filt==='ALL'?['KR','JP','US']:[filt],a=[],h='';
+function rowHtml(x,i){var st=x.stt?(x.sl>1?x.stt+'-'+(x.stt+x.sl-1):x.stt):'';
+ var ncc=x.ss?'https://docs.google.com/spreadsheets/d/'+x.ss+'/edit#gid='+(x.gid||0)+'&range=A'+x.row:'',img=x.img||(x.it&&x.it.img)||'',l=x.l||(x.it&&x.it.l)||'';
+ return'<div class="rl"><span style="display:flex;gap:8px;align-items:flex-start;min-width:0">'+(st?'<span class="stt">'+st+'</span>':'<span class="stt cho">đang<br>cấp số</span>')+
+  (img?'<img class="ph" loading="lazy" referrerpolicy="no-referrer" src="'+esc(img)+'" onerror="this.style.visibility=\'hidden\'">':'')+
+  '<span style="min-width:0"><span class="flag">'+FL[x.c]+'</span><b>'+esc(x.tr||'(chưa có mã)')+'</b>'+(x.mat?' <span class="odb">NCC đã xoá dòng</span>':'')+
+  '<br><span class="small" style="color:#888">tab '+esc(x.t)+' · dòng '+x.row+(x.kg?' · '+esc(x.kg)+'kg':'')+(x.sl>1?' · <b>'+x.sl+' áo</b>':'')+(x.at?' · '+new Date(x.at).toTimeString().slice(0,5):'')+'</span>'+
+  '<br>'+(ncc?'<a class="lk" href="'+esc(ncc)+'" target="_blank">📄 Dòng NCC</a>':'')+(l?'<a class="lk" href="'+esc(l)+'" target="_blank">🔗 Link hàng</a>':'')+'</span></span>'+
+  '<span style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><span class="price">'+vnd(x.p)+'</span><button class="rx" data-i="'+i+'">✕</button></span></div>'}
+function showList(){var all=recvAll().slice().sort(function(x,y){return ((x.stt||1e9)-(y.stt||1e9))||(x.at-y.at)}),cs=filt==='ALL'?['KR','JP','US']:[filt],a=[],h='';
  cs.forEach(function(c){var g=all.filter(function(x){return x.c===c});if(!g.length&&filt==='ALL')return;
   var d=SV&&SV[c]&&SV[c].key?(c==='US'?'kiện ':'đợt ')+SV[c].key:'';
   h+='<div class="sh-h"><span>'+FL[c]+' Đang nhận '+NM[c]+'</span><span>'+sumTxt(g)+'</span></div>'+(d?'<div class="small" style="color:#666;margin:-4px 0 8px">'+esc(d)+' · chung mọi máy · tự cập nhật</div>':'')+
