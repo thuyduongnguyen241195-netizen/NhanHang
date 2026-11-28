@@ -68,6 +68,7 @@ header{padding-top:max(12px,env(safe-area-inset-top))}
 .rbar .rf{background:#16a34a;color:#fff}
 .rl{display:flex;justify-content:space-between;gap:8px;background:#fff;border-radius:10px;padding:9px 11px;margin-bottom:6px;font-size:14px}
 .rl b{word-break:break-all}
+.rx{border:0;background:#fee2e2;color:#dc2626;border-radius:8px;padding:6px 10px;margin-left:8px;font-size:14px}
 .tk{background:#fff;border-radius:14px;padding:12px;margin-bottom:10px}
 .tk h3{margin:0 0 6px;font-size:17px}
 .tk .ln{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;color:#444}
@@ -114,7 +115,7 @@ function call(fn,args){if(!CFG)return Promise.reject(new Error('Chưa kết nố
  return fetch(CFG.api,{method:'POST',body:JSON.stringify({fn:fn,args:args,k:CFG.k})})
   .then(function(r){return r.json()}).then(function(j){if(j.error)throw new Error(j.error);return j.result})}
 function mkRun(ok,fail){var o={withSuccessHandler:function(f){return mkRun(f,fail)},withFailureHandler:function(f){return mkRun(ok,f)}};
- ['apiIndex','apiRefresh','apiReceive','apiUndo','apiTongKet','apiChot','apiUpSapo','apiNhanLo'].forEach(function(n){o[n]=function(){call(n,[].slice.call(arguments)).then(ok||function(){},fail||function(e){toast(e.message,'err')})}});return o}
+ ['apiIndex','apiRefresh','apiReceive','apiUndo','apiTongKet','apiChot','apiUpSapo','apiNhanLo','apiDangNhan'].forEach(function(n){o[n]=function(){call(n,[].slice.call(arguments)).then(ok||function(){},fail||function(e){toast(e.message,'err')})}});return o}
 var google={script:{run:mkRun()}};
 var FL={KR:'🇰🇷',JP:'🇯🇵',US:'🇺🇸'},NM={KR:'Hàn',JP:'Nhật',US:'Mỹ'};
 var KGS=['0,2','0,3','0,4','0,5','0,6','0,7','0,8','0,9','1'];
@@ -208,8 +209,9 @@ function receive(it,n,kg){var b=$('b'+n);if(b.dataset.busy)return;var sl=+(($('q
    recvAdd(it,r,kg,sl);qAdd(it,r.row,kg,sl);if(r.warn)toast('⚠ Đã ghi ngày nhận nhưng chưa vào File Sapo: '+r.warn,'err');else toast('✅ Đã nhận '+it.tr,'ok','Hoàn tác',function(){undo(it,r.row,kg)})})
  .withFailureHandler(function(e){b.dataset.busy='';delete hidden[key(it)];ls('hidden',hidden);b.classList.remove('done');render();beep(false);toast(e.message,'err');actions(it,n)})
  .apiReceive(it,kg)}
-function undo(it,row,kg){google.script.run.withSuccessHandler(function(){delete hidden[key(it)];ls('hidden',hidden);recvDel(it);render();toast('Đã hoàn tác','')})
- .withFailureHandler(function(e){toast(e.message,'err')}).apiUndo(it,row,kg)}
+function undo(it,row,kg,cb){Q=Q.filter(function(x){return!(x.c===it.c&&x.tab===it.t&&x.row==row)});ls('hookQ',Q);
+ google.script.run.withSuccessHandler(function(){delete hidden[key(it)];ls('hidden',hidden);recvDel(it,row);render();toast('Đã hoàn tác','');if(cb)cb()})
+ .withFailureHandler(function(e){toast(e.message,'err');if(cb)cb()}).apiUndo(it,row,kg)}
 
 /* ---- camera ---- */
 function matchOf(code){var q=dig(code);if(q.length<4)return[];
@@ -273,27 +275,45 @@ $('photo').onchange=function(e){var f=e.target.files[0];if(!f)return;e.target.va
   beep(false);toast(codes.length?'Ảnh có '+codes.length+' mã nhưng không có mã tracking ('+codes.join(', ').slice(0,60)+')':'Không thấy mã vạch (ảnh '+(lastInfo||'?')+') — chụp cả tem, cách 20cm, đủ sáng','err')})
  .catch(function(err){beep(false);toast('Không đọc được mã: '+err.message,'err')})};
 
-/* ---- danh sách đã nhận hôm nay + chốt + up Sapo ---- */
-function day0(){var d=new Date();d.setHours(0,0,0,0);return d.getTime()}
-function recvAll(){var a=ls('recv')||[],t=day0();a=a.filter(function(x){return x.at>=t});ls('recv',a);return a}
-function recvAdd(it,r,kg,sl){var a=recvAll().filter(function(x){return x.k!==key(it)});a.push({k:key(it),c:it.c,tr:it.tr,p:it.p,kg:kg||'',sl:sl||1,t:it.t,row:r.row,at:Date.now(),it:it});ls('recv',a);recvBar()}
-function recvDel(it){ls('recv',recvAll().filter(function(x){return x.k!==key(it)}));recvBar()}
+/* ---- danh sách ĐANG NHẬN: chung cho mọi máy (đọc từ file NCC), giữ qua ngày đến khi bấm "Đã nhận toàn bộ" ---- */
+var SV=ls('dangNhan')||null,svT=0,svBusy=false,LISTOPEN=false;
+function svKeys(){var sk={};if(SV)['KR','JP','US'].forEach(function(c){var r=SV[c];if(r&&r.items)r.items.forEach(function(x){sk[c+'|'+x.t+'|'+x.row]=1})});return sk}
+function recvAll(){var a=ls('recv')||[],sk=svKeys(),now=Date.now(),q=Q||[];
+ a=a.filter(function(x){return x.row&&!sk[x.c+'|'+x.t+'|'+x.row]&&(now-x.at<600000||q.some(function(y){return y.c===x.c&&y.tab===x.t&&y.row==x.row}))});ls('recv',a);
+ var out=[];if(SV)['KR','JP','US'].forEach(function(c){var r=SV[c];if(r&&r.items)r.items.forEach(function(x){var it={c:c,t:x.t,tr:x.tr,l:x.l,p:x.p};
+  out.push({k:key(it),c:c,tr:x.tr,p:x.p,kg:x.kg||'',sl:x.sl||1,t:x.t,row:x.row,at:x.at||0,it:it})})});
+ return out.concat(a)}
+function recvAdd(it,r,kg,sl){var a=(ls('recv')||[]).filter(function(x){return x.k!==key(it)});a.push({k:key(it),c:it.c,tr:it.tr,p:it.p,kg:kg||'',sl:sl||1,t:it.t,row:r.row,at:Date.now(),it:it});ls('recv',a);recvBar()}
+function recvDel(it,row){ls('recv',(ls('recv')||[]).filter(function(x){return x.k!==key(it)}));
+ if(SV&&SV[it.c]&&SV[it.c].items){SV[it.c].items=SV[it.c].items.filter(function(x){return!(x.t===it.t&&x.row==row)});ls('dangNhan',SV)}recvBar()}
+function loadSV(cb){if(svBusy||!CFG){if(cb)cb();return}svBusy=true;
+ google.script.run.withSuccessHandler(function(r){svBusy=false;svT=Date.now();var o={};
+   ['KR','JP','US'].forEach(function(c){if(r&&r[c]&&!r[c].loiHT)o[c]=r[c];else if(SV&&SV[c])o[c]=SV[c]});SV=o;ls('dangNhan',SV);recvBar();if(cb)cb()})
+  .withFailureHandler(function(){svBusy=false;if(cb)cb()}).apiDangNhan()}
+function dotTxt(){if(!SV)return'';return['KR','JP','US'].filter(function(c){return SV[c]&&SV[c].key&&SV[c].items&&SV[c].items.length}).map(function(c){return FL[c]+' '+(c==='US'?'kiện ':'đợt ')+SV[c].key}).join(' · ')}
 function recvBar(){var a=recvAll();$('rbar').style.display=a.length?'flex':'none';
  var n={KR:0,JP:0,US:0};a.forEach(function(x){n[x.c]++});
- $('rview').textContent='✅ Đã nhận hôm nay: '+a.length+' món ('+['KR','JP','US'].filter(function(c){return n[c]}).map(function(c){return FL[c]+n[c]}).join(' ')+') ›'}
-function showSheet(h,noNext){$('sheet').innerHTML=h;$('mask').style.display='block';$('sbar').style.display='flex';$('snext').style.display=noNext?'none':'';setTimeout(function(){$('sheet').classList.add('open')},10)}
-$('rview').onclick=function(){var a=recvAll().slice().reverse();
- var h='<div class="sh-h"><span>Đã nhận hôm nay</span><span>'+a.length+' món</span></div>'+a.map(function(x){
-  return'<div class="rl"><span><span class="flag">'+FL[x.c]+'</span><b>'+esc(x.tr)+'</b><br><span class="small" style="color:#888">tab '+esc(x.t)+' · dòng '+x.row+(x.kg?' · '+esc(x.kg)+'kg':'')+(x.sl>1?' · <b>'+x.sl+' áo</b>':'')+' · '+new Date(x.at).toTimeString().slice(0,5)+'</span></span><span class="price">'+vnd(x.p)+'</span></div>'}).join('')+
+ $('rview').textContent='✅ Đang nhận: '+a.length+' món ('+['KR','JP','US'].filter(function(c){return n[c]}).map(function(c){return FL[c]+n[c]}).join(' ')+') ›'}
+function showSheet(h,noNext){LISTOPEN=false;$('sheet').innerHTML=h;$('mask').style.display='block';$('sbar').style.display='flex';$('snext').style.display=noNext?'none':'';setTimeout(function(){$('sheet').classList.add('open')},10)}
+function showList(){var a=recvAll().slice().sort(function(x,y){return y.at-x.at});
+ var h='<div class="sh-h"><span>Đang nhận (chung mọi máy)</span><span>'+a.length+' món</span></div>'+(dotTxt()?'<div class="small" style="color:#666;margin:-4px 0 8px">'+esc(dotTxt())+' · tự cập nhật</div>':'')+a.map(function(x,i){
+  return'<div class="rl"><span><span class="flag">'+FL[x.c]+'</span><b>'+esc(x.tr)+'</b><br><span class="small" style="color:#888">tab '+esc(x.t)+' · dòng '+x.row+(x.kg?' · '+esc(x.kg)+'kg':'')+(x.sl>1?' · <b>'+x.sl+' áo</b>':'')+(x.at?' · '+new Date(x.at).toTimeString().slice(0,5):'')+'</span></span><span style="display:flex;align-items:center"><span class="price">'+vnd(x.p)+'</span><button class="rx" data-i="'+i+'">✕</button></span></div>'}).join('')+
   '<button class="btn green" id="rfin2">📦 Đã nhận toàn bộ hàng</button>';
- showSheet(h,true);$('rfin2').onclick=finish};
+ showSheet(h,true);LISTOPEN=true;$('rfin2').onclick=finish;
+ Array.prototype.forEach.call(document.querySelectorAll('.rx'),function(b){b.onclick=function(){var x=a[+b.dataset.i];
+  if(confirm('Bỏ nhận món '+x.tr+' (tab '+x.t+' dòng '+x.row+')?\nXoá ngày nhận trên file NCC và bỏ khỏi File Sapo — mọi máy đều thấy.')){b.disabled=true;undo(x.it,x.row,x.kg,showList)}}})}
+$('rview').onclick=function(){showList();loadSV(function(){if(LISTOPEN)showList()})};
+setInterval(function(){if(!document.hidden&&CFG&&Date.now()-svT>(LISTOPEN?28000:180000))loadSV(function(){if(LISTOPEN)showList()})},10000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&CFG&&Date.now()-svT>15000)loadSV(function(){if(LISTOPEN)showList()})});
+if(CFG)setTimeout(function(){loadSV()},1500);
 $('rfin').onclick=finish;
 function finish(){if(Q.length){showSheet('<div class="empty">⏳ Đang đưa '+Q.length+' món vào File Sapo…</div>',true);qRun(function(e){if(e)showSheet('<div class="empty" style="color:#dc2626">Chưa đưa được món vào File Sapo: '+esc(e.message)+'<br>Thử lại sau ít phút.</div>',true);else{closeSheet();finish()}});return}
+ if(!finish.ok){showSheet('<div class="empty">⏳ Đang lấy danh sách chung…</div>',true);loadSV(function(){finish.ok=1;finish();finish.ok=0});return}
  var a=recvAll(),cs=['KR','JP','US'].filter(function(c){return a.some(function(x){return x.c===c})});
- if(!cs.length){toast('Hôm nay chưa nhận món nào','err');return}
- if(!confirm('Chốt đã nhận hết hàng hôm nay ('+cs.map(function(c){return NM[c]}).join(', ')+')?\n'+(cs.indexOf('US')>=0?'Kiện Mỹ sẽ được tick "Đã nhận đủ" và chia tiền cân.':'')))return;
+ if(!cs.length){closeSheet();toast('Chưa có món nào đang nhận','err');return}
+ if(!confirm('Chốt ĐÃ NHẬN TOÀN BỘ ('+dotTxt()+')?\nMọi máy sẽ kết thúc đợt này; lần quét sau mở đợt / File Sapo mới.\n'+(cs.indexOf('US')>=0?'Kiện Mỹ sẽ được tick "Đã nhận đủ" và chia tiền cân.':'')))return;
  showSheet('<div class="empty">⏳ Đang chốt và cập nhật File Sapo…</div>',true);
- google.script.run.withSuccessHandler(function(res){renderSum(res,a)}).withFailureHandler(function(e){showSheet('<div class="empty" style="color:#dc2626">'+esc(e.message)+'</div>',true)}).apiChot(cs)}
+ google.script.run.withSuccessHandler(function(res){cs.forEach(function(c){if(res[c]&&!res[c].loiHT&&SV)SV[c]={key:'',items:[]};});ls('dangNhan',SV);ls('recv',(ls('recv')||[]).filter(function(x){return cs.indexOf(x.c)<0}));recvBar();renderSum(res,a)}).withFailureHandler(function(e){showSheet('<div class="empty" style="color:#dc2626">'+esc(e.message)+'</div>',true)}).apiChot(cs)}
 function renderSum(res,a){var cs=Object.keys(res),tongM=0,tongT=0;
  var h='<div class="sh-h"><span>Tổng kết nhận hàng</span><span>'+new Date().toLocaleDateString('vi-VN')+'</span></div>';
  cs.forEach(function(c){var r=res[c]||{},nApp=a.filter(function(x){return x.c===c}).reduce(function(s,x){return s+(x.sl||1)},0);
@@ -301,7 +321,7 @@ function renderSum(res,a){var cs=Object.keys(res),tongM=0,tongT=0;
   if(r.loiHT){h+='<div class="st r">'+esc(r.loiHT)+'</div></div>';return}
   if(!r.co){h+='<div class="st y">Chưa có File Sapo'+(r.choKien?' — '+r.choKien+' món chờ NCC ghi "CÂN HÀNG VỀ"':'')+'</div></div>';return}
   tongM+=r.soMon;tongT+=r.tong;
-  h+='<div class="ln"><span>Nhận hôm nay (số áo)</span><b>'+nApp+' món</b></div><div class="ln"><span>Trong File Sapo</span><b>'+r.soMon+' món</b></div>'+
+  h+='<div class="ln"><span>Đã nhận đợt này (số áo)</span><b>'+nApp+' món</b></div><div class="ln"><span>Trong File Sapo</span><b>'+r.soMon+' món</b></div>'+
    (r.tienCan?'<div class="ln"><span>Tiền cân (đã chia vào giá)</span><b>'+vnd(r.tienCan)+'</b></div>':'')+
    '<div class="ln"><span>Tổng giá vốn</span><b class="price">'+vnd(r.tong)+'</b></div>'+
    (r.choKien?'<div class="st y">'+r.choKien+' món Mỹ chưa có kiện (chờ NCC ghi "CÂN HÀNG VỀ")</div>':'')+
