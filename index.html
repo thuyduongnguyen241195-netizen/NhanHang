@@ -139,6 +139,7 @@ function toast(msg,cls,btn,fn){clearTimeout(toastT);var t=$('toast');t.className
 /* ---- dữ liệu ---- */
 function setData(json){D=JSON.parse(json);ls('kho',json);
  D.items.forEach(function(i){i.d=dig(i.tr)});
+ var im=ls('imgMap')||{};D.items.forEach(function(i){if(i.img&&i.l)im[i.l]=i.img});var ik=Object.keys(im);if(ik.length>3000)ik.slice(0,ik.length-3000).forEach(function(k){delete im[k]});ls('imgMap',im);IMG=im;   // nhớ ảnh món chờ nhận -> danh sách đã nhận vẫn có ảnh
  var h=ls('hidden')||{},now=Date.now();Object.keys(h).forEach(function(k){if(now-h[k]>20*60000)delete h[k]});hidden=h;ls('hidden',hidden);
  var m=Math.round((Date.now()-D.updated)/60000);
  $('upd').textContent='Cập nhật '+(m<1?'vừa xong':m+' phút trước')+(D.errs&&D.errs.length?' · ⚠ '+D.errs.join('; '):'');renderDoi();render()}
@@ -301,8 +302,9 @@ function recvBar(){var all=recvAll(),a=filt==='ALL'?all:all.filter(function(x){r
  if(filt==='ALL'){$('rview').textContent='✅ Đang nhận: '+['KR','JP','US'].filter(function(c){return n[c]}).map(function(c){return FL[c]+' '+n[c]}).join(' · ')+' ›';$('rfin').textContent='📦 Chốt từng nước'}
  else{$('rview').textContent='✅ '+FL[filt]+' Đang nhận: '+sumTxt(a)+' ›';$('rfin').textContent='📦 Đã nhận hết '+NM[filt]}}
 function showSheet(h,noNext){LISTOPEN=false;$('sheet').innerHTML=h;$('mask').style.display='block';$('sbar').style.display='flex';$('snext').style.display=noNext?'none':'';setTimeout(function(){$('sheet').classList.add('open')},10)}
+var IMG=ls('imgMap')||{};
 function rowHtml(x,i){var st=x.stt?(x.sl>1?x.stt+'-'+(x.stt+x.sl-1):x.stt):'';
- var ncc=x.ss?'https://docs.google.com/spreadsheets/d/'+x.ss+'/edit#gid='+(x.gid||0)+'&range=A'+x.row:'',img=x.img||(x.it&&x.it.img)||'',l=x.l||(x.it&&x.it.l)||'';
+ var ncc=x.ss?'https://docs.google.com/spreadsheets/d/'+x.ss+'/edit#gid='+(x.gid||0)+'&range=A'+x.row:'',l=x.l||(x.it&&x.it.l)||'',img=x.img||(x.it&&x.it.img)||(IMG&&IMG[l])||'';
  return'<div class="rl"><span style="display:flex;gap:8px;align-items:flex-start;min-width:0">'+(st?'<span class="stt">'+st+'</span>':'<span class="stt cho">đang<br>cấp số</span>')+
   (img?'<img class="ph" loading="lazy" referrerpolicy="no-referrer" src="'+esc(img)+'" onerror="this.style.visibility=\'hidden\'">':'')+
   '<span style="min-width:0"><span class="flag">'+FL[x.c]+'</span><b>'+esc(x.tr||'(chưa có mã)')+'</b>'+(x.mat?' <span class="odb">NCC đã xoá dòng</span>':'')+
